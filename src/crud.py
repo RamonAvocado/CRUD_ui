@@ -1,3 +1,4 @@
+import types
 import inspect
 from typing import Callable
 from fastapi import APIRouter, Body, Query
@@ -47,13 +48,16 @@ class Crud:
             print(endpoint)
 
             if "POST" in endpoint:
-                return self._create_endpoint(cls)
+                return self._create_endpoint(cls, operation)
             elif "GET" in endpoint:
-                return self._read_endpoint(cls)
+                return self._read_endpoint(cls, operation)
+            elif "PUT" in endpoint:
+                return self._update_endpoint(cls, operation)
+            elif "DELETE" in endpoint:
+                return self._delete_endpoint(cls, operation)
             else:
-                return self._read_endpoint(cls)
+                return self._read_endpoint(cls, operation)
 
-        handler.__name__ = operation
         return handler()
 
     def _extracting_annotations_from_cls(self, cls:type):
@@ -66,32 +70,19 @@ class Crud:
 
         return annotations
 
-    def _create_endpoint(self, cls: type) -> Callable:
-        annotations = self._extracting_annotations_from_cls(cls)
+    def _create_endpoint(self, cls, function_name) -> Callable:
+        return self._default_endpoint(cls, function_name, Body)
 
-        parameters = []
-        env = {}
-        # for key, item in annotations.items():
-        for p, meta in annotations.items():
-            item_type = meta.annotation
-            env[f"__t_{p}"] = item_type
-            env[f"__d_{p}"] = Body(...)
-            parameters.append(f"{p}:__t_{p} = __d_{p}")
+    def _read_endpoint(self, cls, function_name) -> Callable:
+        return self._default_endpoint(cls, function_name, Query)
 
-        sig =", ".join(parameters)
-        name = "TestFunction"
-        src = f"""
-def {name}({sig}):
-    return {"Test"}
-        """
+    def _update_endpoint(self, cls, function_name):
+        return self._default_endpoint(cls, function_name, Body)
 
-        ns: dict[str, Callable]= {}
+    def _delete_endpoint(self, id: int, function_name):
+        return self._create_function()
 
-        exec(src, env, ns)
-        return ns[name]
-
-
-    def _read_endpoint(self, cls: type) -> Callable:
+    def _default_endpoint(self, cls: type, function_name:str,  fastapi_callable: Callable):
         annotations = self._extracting_annotations_from_cls(cls)
 
         parameters = []
@@ -99,30 +90,38 @@ def {name}({sig}):
         for p, meta in annotations.items():
             item_type = meta.annotation
             env[f"__t_{p}"] = item_type
-            env[f"__d_{p}"] = Query(...)
+            env[f"__d_{p}"] = fastapi_callable(...)
             parameters.append(f"{p}:__t_{p} = __d_{p}")
 
         sig =", ".join(parameters)
-        name = "TestFunction"
-        src = f"""
-def {name}({sig}):
-    return {"Test"}
-        """
-
+        src = self._create_function_str(name=function_name, sig=sig) 
         ns = {}
         exec(src, env, ns)
         print(ns)
-        return ns[name]
+        return ns[function_name]
 
-    def _update_endpoint(self):
-        pass
+    def _create_code(self, a):
+        print("HELLO")
+        return {"Test"}
 
-    def _delete_endpoint(self):
-        pass
+    def _create_function(self):
+        func = types.FunctionType(
+            self._create_code.__code__,
+            {"__builtins__": __builtins__},
+            # name="NEWEIRD",
+            # argdefs=(),
+            # closure=None
+        )
+        return func
+
+    def _create_function_str(self, name, sig):
+        return f"""
+def {name}({sig}):
+    return {"Test"}
+        """
+
 
     def get_router(self):
         return self.router
 
     
-
-
